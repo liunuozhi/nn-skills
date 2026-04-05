@@ -1,0 +1,15 @@
+{
+  "name": "nn-skills-marketplace",
+  "description": "Marketplace for nn-skills plugin",
+  "owner": {
+    "name": "Liu"
+  },
+  "plugins": [
+    {
+      "name": "nn-skills",
+      "description": "TDD and PyTorch test coverage skills for neural network development",
+      "version": "1.0.0",
+      "source": "./"
+    }
+  ]
+}
