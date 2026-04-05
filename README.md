@@ -20,26 +20,6 @@ Add the marketplace and install the plugin inside Claude Code:
 /plugin install nn-skills
 ```
 
-### Alternative: load from local clone
-
-```bash
-git clone https://github.com/liunuozhi/nn-skills.git
-claude --plugin-dir ./nn-skills
-```
-
-## Usage
-
-Skills auto-trigger based on context, or invoke explicitly:
-
-```
-/nn-skills:tdd
-/nn-skills:test-nn-components
-```
-
 ## Acknowledgments
 
 Inspired by [Superpowers](https://github.com/obra/superpowers) by Jesse Vincent — an agentic skills framework and software development methodology for coding agents.
-
-## License
-
-[MIT](LICENSE)

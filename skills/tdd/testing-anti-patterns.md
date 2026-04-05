@@ -1,299 +1,337 @@
 # Testing Anti-Patterns
 
-**Load this reference when:** writing or changing tests, adding mocks, or tempted to add test-only methods to production code.
+**Load this reference when:** writing or changing tests, setting up fixtures, or tempted to add test-only methods to production modules.
 
 ## Overview
 
-Tests must verify real behavior, not mock behavior. Mocks are a means to isolate, not the thing being tested.
+Tests must verify real behavior, not fixture properties. Synthetic data is a means to isolate, not the thing being tested.
 
-**Core principle:** Test what the code does, not what the mocks do.
+**Core principle:** Test what the module does, not what the test data looks like.
 
 **Following strict TDD prevents these anti-patterns.**
 
 ## The Iron Laws
 
 ```
-1. NEVER test mock behavior
-2. NEVER add test-only methods to production classes
-3. NEVER mock without understanding dependencies
+1. NEVER test fixture behavior instead of module behavior
+2. NEVER add test-only methods to production modules
+3. NEVER over-mock when small tensors suffice
 ```
 
-## Anti-Pattern 1: Testing Mock Behavior
+## Anti-Pattern 1: Testing Fixture Properties
 
 **The violation:**
-```typescript
-// ❌ BAD: Testing that the mock exists
-test('renders sidebar', () => {
-  render(<Page />);
-  expect(screen.getByTestId('sidebar-mock')).toBeInTheDocument();
-});
+```python
+# BAD: Testing that synthetic data has the right shape
+def test_model(model, sample_batch):
+    assert sample_batch.shape == (4, 3, 32, 32)  # tests the fixture, not the model
+    out = model(sample_batch)
+    assert out is not None  # tests nothing meaningful
 ```
 
 **Why this is wrong:**
-- You're verifying the mock works, not that the component works
-- Test passes when mock is present, fails when it's not
+- You're verifying the test setup, not the module
+- `assert out is not None` passes for any garbage output
 - Tells you nothing about real behavior
 
-**your human partner's correction:** "Are we testing the behavior of a mock?"
-
 **The fix:**
-```typescript
-// ✅ GOOD: Test real component or don't mock it
-test('renders sidebar', () => {
-  render(<Page />);  // Don't mock sidebar
-  expect(screen.getByRole('navigation')).toBeInTheDocument();
-});
-
-// OR if sidebar must be mocked for isolation:
-// Don't assert on the mock - test Page's behavior with sidebar present
+```python
+# GOOD: Test what the model actually produces
+def test_model_output_shape(model, sample_batch):
+    out = model(sample_batch)
+    assert out.shape == (sample_batch.shape[0], 10)
 ```
 
 ### Gate Function
 
 ```
-BEFORE asserting on any mock element:
-  Ask: "Am I testing real component behavior or just mock existence?"
+BEFORE writing an assertion:
+  Ask: "Am I testing the module's behavior or just my test setup?"
 
-  IF testing mock existence:
-    STOP - Delete the assertion or unmock the component
+  IF testing setup:
+    STOP - Delete the assertion or replace with a behavioral check
 
   Test real behavior instead
 ```
 
-## Anti-Pattern 2: Test-Only Methods in Production
+## Anti-Pattern 2: Test-Only Methods in Production Modules
 
 **The violation:**
-```typescript
-// ❌ BAD: destroy() only used in tests
-class Session {
-  async destroy() {  // Looks like production API!
-    await this._workspaceManager?.destroyWorkspace(this.id);
-    // ... cleanup
-  }
-}
+```python
+# BAD: _get_intermediate() only used in tests
+class Encoder(nn.Module):
+    def _get_intermediate(self, x):
+        """Expose intermediate activations for testing."""
+        return self.layer1(x)
 
-// In tests
-afterEach(() => session.destroy());
+    def forward(self, x):
+        h = self.layer1(x)
+        return self.layer2(h)
 ```
 
 **Why this is wrong:**
-- Production class polluted with test-only code
-- Dangerous if accidentally called in production
+- Production module polluted with test-only code
+- Someone might call `_get_intermediate()` in production
 - Violates YAGNI and separation of concerns
-- Confuses object lifecycle with entity lifecycle
 
 **The fix:**
-```typescript
-// ✅ GOOD: Test utilities handle test cleanup
-// Session has no destroy() - it's stateless in production
+```python
+# GOOD: Use hooks to inspect internals without modifying the module
+def test_intermediate_activations(model, sample_batch):
+    activations = {}
+    def hook(module, input, output):
+        activations["layer1"] = output
 
-// In test-utils/
-export async function cleanupSession(session: Session) {
-  const workspace = session.getWorkspaceInfo();
-  if (workspace) {
-    await workspaceManager.destroyWorkspace(workspace.id);
-  }
-}
-
-// In tests
-afterEach(() => cleanupSession(session));
+    model.layer1.register_forward_hook(hook)
+    model(sample_batch)
+    assert activations["layer1"].shape == (4, 64, 16, 16)
 ```
 
 ### Gate Function
 
 ```
-BEFORE adding any method to production class:
+BEFORE adding any method to a production nn.Module:
   Ask: "Is this only used by tests?"
 
   IF yes:
-    STOP - Don't add it
-    Put it in test utilities instead
+    STOP - Use forward hooks, or test via public API
+    Put helpers in conftest.py or test utilities
 
-  Ask: "Does this class own this resource's lifecycle?"
+  Ask: "Does this module own this functionality?"
 
   IF no:
-    STOP - Wrong class for this method
+    STOP - Wrong module for this method
 ```
 
-## Anti-Pattern 3: Mocking Without Understanding
+## Anti-Pattern 3: Over-Mocking When Small Tensors Suffice
 
 **The violation:**
-```typescript
-// ❌ BAD: Mock breaks test logic
-test('detects duplicate server', () => {
-  // Mock prevents config write that test depends on!
-  vi.mock('ToolCatalog', () => ({
-    discoverAndCacheTools: vi.fn().mockResolvedValue(undefined)
-  }));
+```python
+# BAD: Mocking the entire forward pass
+def test_training_step(mocker):
+    mock_model = mocker.MagicMock()
+    mock_model.return_value = torch.tensor([[0.1, 0.9]])
+    mock_loss_fn = mocker.MagicMock()
+    mock_loss_fn.return_value = torch.tensor(0.5, requires_grad=True)
 
-  await addServer(config);
-  await addServer(config);  // Should throw - but won't!
-});
+    loss = train_step(mock_model, mock_loss_fn, inputs, targets)
+    mock_model.assert_called_once()
 ```
 
 **Why this is wrong:**
-- Mocked method had side effect test depended on (writing config)
-- Over-mocking to "be safe" breaks actual behavior
-- Test passes for wrong reason or fails mysteriously
+- Tests that mocks were called, not that training works
+- Fake tensors don't flow through real computation
+- Gradient behavior is completely untested
+- Test passes even if train_step is broken
 
 **The fix:**
-```typescript
-// ✅ GOOD: Mock at correct level
-test('detects duplicate server', () => {
-  // Mock the slow part, preserve behavior test needs
-  vi.mock('MCPServerManager'); // Just mock slow server startup
+```python
+# GOOD: Use a tiny real model — fast and tests real behavior
+def test_training_step():
+    model = nn.Linear(4, 2)
+    loss_fn = nn.CrossEntropyLoss()
+    x = torch.randn(2, 4)
+    y = torch.randint(0, 2, (2,))
 
-  await addServer(config);  // Config written
-  await addServer(config);  // Duplicate detected ✓
-});
+    loss = train_step(model, loss_fn, x, y)
+    assert loss.item() > 0
+    assert model.weight.grad is not None
 ```
 
 ### Gate Function
 
 ```
-BEFORE mocking any method:
-  STOP - Don't mock yet
+BEFORE mocking any PyTorch module:
+  STOP - Do you actually need a mock?
 
-  1. Ask: "What side effects does the real method have?"
-  2. Ask: "Does this test depend on any of those side effects?"
-  3. Ask: "Do I fully understand what this test needs?"
+  In DL, real modules with small tensors are:
+    - Fast (tiny inputs = microseconds)
+    - Accurate (real gradients, real dtypes)
+    - Simple (less setup than mock configuration)
 
-  IF depends on side effects:
-    Mock at lower level (the actual slow/external operation)
-    OR use test doubles that preserve necessary behavior
-    NOT the high-level method the test depends on
+  Use mocks ONLY for:
+    - External I/O (file systems, network, databases)
+    - Hardware-specific code you can't run locally
+    - Third-party API calls
 
-  IF unsure what test depends on:
-    Run test with real implementation FIRST
-    Observe what actually needs to happen
-    THEN add minimal mocking at the right level
-
-  Red flags:
-    - "I'll mock this to be safe"
-    - "This might be slow, better mock it"
-    - Mocking without understanding the dependency chain
+  NEVER mock:
+    - nn.Module subclasses (use tiny versions instead)
+    - Loss functions (they're pure computation)
+    - Optimizers (they're fast with small param counts)
+    - Tensor operations
 ```
 
-## Anti-Pattern 4: Incomplete Mocks
+## Anti-Pattern 4: Wrong Tolerance or No Tolerance
 
 **The violation:**
-```typescript
-// ❌ BAD: Partial mock - only fields you think you need
-const mockResponse = {
-  status: 'success',
-  data: { userId: '123', name: 'Alice' }
-  // Missing: metadata that downstream code uses
-};
-
-// Later: breaks when code accesses response.metadata.requestId
+```python
+# BAD: Exact equality on floating-point results
+def test_normalize(sample_batch):
+    out = normalize(sample_batch)
+    assert out.mean() == 0.0  # fails due to float precision
+    assert out.std() == 1.0
 ```
 
 **Why this is wrong:**
-- **Partial mocks hide structural assumptions** - You only mocked fields you know about
-- **Downstream code may depend on fields you didn't include** - Silent failures
-- **Tests pass but integration fails** - Mock incomplete, real API complete
-- **False confidence** - Test proves nothing about real behavior
-
-**The Iron Rule:** Mock the COMPLETE data structure as it exists in reality, not just fields your immediate test uses.
+- Floating-point arithmetic is inexact
+- Test is flaky or always fails
+- Different devices (CPU vs GPU) produce slightly different results
 
 **The fix:**
-```typescript
-// ✅ GOOD: Mirror real API completeness
-const mockResponse = {
-  status: 'success',
-  data: { userId: '123', name: 'Alice' },
-  metadata: { requestId: 'req-789', timestamp: 1234567890 }
-  // All fields real API returns
-};
+```python
+# GOOD: Use appropriate tolerances
+def test_normalize(sample_batch):
+    out = normalize(sample_batch)
+    assert torch.allclose(out.mean(), torch.tensor(0.0), atol=1e-5)
+    assert torch.allclose(out.std(), torch.tensor(1.0), atol=1e-1)
 ```
 
 ### Gate Function
 
 ```
-BEFORE creating mock responses:
-  Check: "What fields does the real API response contain?"
+BEFORE comparing tensor values:
+  Ask: "Is exact equality meaningful here?"
 
-  Actions:
-    1. Examine actual API response from docs/examples
-    2. Include ALL fields system might consume downstream
-    3. Verify mock matches real response schema completely
+  IF floating-point computation is involved:
+    Use torch.allclose() with explicit atol/rtol
+    Choose tolerances based on:
+      - float32: atol=1e-5 to 1e-6 for most ops
+      - float16: atol=1e-2 to 1e-3
+      - Accumulated ops (many layers): looser tolerance
 
-  Critical:
-    If you're creating a mock, you must understand the ENTIRE structure
-    Partial mocks fail silently when code depends on omitted fields
-
-  If uncertain: Include all documented fields
+  Exact equality is OK for:
+    - Integer tensors (class labels, indices)
+    - Shape comparisons
+    - Device/dtype checks
 ```
 
-## Anti-Pattern 5: Integration Tests as Afterthought
+## Anti-Pattern 5: Full-Size Inputs in Tests
 
 **The violation:**
-```
-✅ Implementation complete
-❌ No tests written
-"Ready for testing"
+```python
+# BAD: Using production-size inputs
+def test_resnet_output():
+    model = ResNet50()
+    x = torch.randn(32, 3, 224, 224)  # 1.5GB+ memory, slow
+    out = model(x)
+    assert out.shape == (32, 1000)
 ```
 
 **Why this is wrong:**
-- Testing is part of implementation, not optional follow-up
-- TDD would have caught this
-- Can't claim complete without tests
+- Slow — seconds per test instead of milliseconds
+- Memory-heavy — may OOM on CI
+- Tests the same thing a small input would test
+- Discourages running tests frequently
 
 **The fix:**
-```
-TDD cycle:
-1. Write failing test
-2. Implement to pass
-3. Refactor
-4. THEN claim complete
+```python
+# GOOD: Tiny inputs test the same properties
+def test_resnet_output():
+    model = ResNet50()
+    x = torch.randn(2, 3, 32, 32)  # minimal valid input
+    out = model(x)
+    assert out.shape == (2, 1000)
 ```
 
-## When Mocks Become Too Complex
+### Gate Function
+
+```
+BEFORE choosing tensor sizes for tests:
+  Default to SMALL:
+    - Batch: 2-4
+    - Spatial: smallest valid size (e.g., 32x32 for CNNs)
+    - Channels: match model requirements
+    - Sequence length: 4-16 for transformers
+
+  Use larger sizes ONLY when:
+    - Testing behavior specific to size (e.g., padding at odd dimensions)
+    - Explicitly stress-testing memory/performance (mark @pytest.mark.slow)
+```
+
+## Anti-Pattern 6: No Seed, Flaky Tests
+
+**The violation:**
+```python
+# BAD: Random init means random test outcome
+def test_model_output_range():
+    model = MyModel()
+    x = torch.randn(4, 3, 32, 32)
+    out = model(x)
+    assert out.min() >= 0  # fails 1 in 20 runs
+```
+
+**Why this is wrong:**
+- Test passes or fails depending on random seed
+- CI becomes unreliable — "just re-run it" culture
+- Hides real bugs in noise
+
+**The fix:**
+```python
+# GOOD: Seed when assertions depend on values
+def test_model_output_range():
+    torch.manual_seed(42)
+    model = MyModel()
+    x = torch.randn(4, 3, 32, 32)
+    out = model(x)
+    assert out.min() >= 0
+```
+
+Or better — don't assert on value ranges that depend on initialization. Test invariants instead:
+
+```python
+# BETTER: Test structural invariants, not random-dependent values
+def test_softmax_output_sums_to_one():
+    model = MyModel()  # no seed needed
+    x = torch.randn(4, 3, 32, 32)
+    out = F.softmax(model(x), dim=-1)
+    assert torch.allclose(out.sum(dim=-1), torch.ones(4), atol=1e-5)
+```
+
+## When Mocks Become Complex — You Don't Need Them
 
 **Warning signs:**
 - Mock setup longer than test logic
-- Mocking everything to make test pass
-- Mocks missing methods real components have
+- Mocking nn.Modules or loss functions
+- Configuring return values for tensor operations
 - Test breaks when mock changes
 
-**your human partner's question:** "Do we need to be using a mock here?"
+**In DL, the answer is almost always: use a real tiny model.**
 
-**Consider:** Integration tests with real components often simpler than complex mocks
+A `nn.Linear(4, 2)` is faster to set up, faster to run, and tests real behavior.
 
 ## TDD Prevents These Anti-Patterns
 
 **Why TDD helps:**
 1. **Write test first** → Forces you to think about what you're actually testing
-2. **Watch it fail** → Confirms test tests real behavior, not mocks
+2. **Watch it fail** → Confirms test tests real behavior, not fixtures
 3. **Minimal implementation** → No test-only methods creep in
-4. **Real dependencies** → You see what the test actually needs before mocking
-
-**If you're testing mock behavior, you violated TDD** - you added mocks without watching test fail against real code first.
+4. **Small tensors by default** → RED phase needs fast feedback
+5. **Real modules** → You see what the test needs before reaching for mocks
 
 ## Quick Reference
 
 | Anti-Pattern | Fix |
 |--------------|-----|
-| Assert on mock elements | Test real component or unmock it |
-| Test-only methods in production | Move to test utilities |
-| Mock without understanding | Understand dependencies first, mock minimally |
-| Incomplete mocks | Mirror real API completely |
-| Tests as afterthought | TDD - tests first |
-| Over-complex mocks | Consider integration tests |
+| Assert on fixture properties | Test module output/behavior |
+| Test-only methods in modules | Use hooks or test via public API |
+| Mock nn.Modules or losses | Use tiny real modules |
+| Exact float equality | Use `torch.allclose` with tolerances |
+| Full-size inputs | Batch=2-4, smallest valid spatial dims |
+| No seed, flaky tests | Seed or test invariants, not random-dependent values |
 
 ## Red Flags
 
-- Assertion checks for `*-mock` test IDs
+- Assertions on tensor existence (`is not None`) without checking values/shapes
 - Methods only called in test files
-- Mock setup is >50% of test
-- Test fails when you remove mock
-- Can't explain why mock is needed
-- Mocking "just to be safe"
+- `MagicMock` on anything that could be a real `nn.Module`
+- `assert x == y` on float tensors
+- Test takes >1 second without `@pytest.mark.slow`
+- "Just re-run, it's flaky"
 
 ## The Bottom Line
 
-**Mocks are tools to isolate, not things to test.**
+**In DL testing, small real models beat mocks every time.**
 
-If TDD reveals you're testing mock behavior, you've gone wrong.
+If TDD reveals you're testing fixture behavior or mock interactions, you've gone wrong.
 
-Fix: Test real behavior or question why you're mocking at all.
+Fix: Test real behavior with tiny tensors.

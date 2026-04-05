@@ -1,6 +1,6 @@
 ---
 name: test-driven-development
-description: Use when implementing any feature or bugfix, before writing implementation code
+description: Use when implementing any nn.Module, loss function, training loop, or data pipeline — write the failing test before writing implementation code
 ---
 
 # Test-Driven Development (TDD)
@@ -16,15 +16,17 @@ Write the test first. Watch it fail. Write minimal code to pass.
 ## When to Use
 
 **Always:**
-- New features
+- New modules, layers, loss functions
 - Bug fixes
 - Refactoring
-- Behavior changes
+- Training loop changes
+- Data pipeline modifications
 
 **Exceptions (ask your human partner):**
-- Throwaway prototypes
+- Throwaway prototypes / architecture search
 - Generated code
 - Configuration files
+- Hyperparameter sweeps
 
 Thinking "skip TDD just this once"? Stop. That's rationalization.
 
@@ -73,49 +75,41 @@ digraph tdd_cycle {
 Write one minimal test showing what should happen.
 
 <Good>
-```typescript
-test('retries failed operations 3 times', async () => {
-  let attempts = 0;
-  const operation = () => {
-    attempts++;
-    if (attempts < 3) throw new Error('fail');
-    return 'success';
-  };
-
-  const result = await retryOperation(operation);
-
-  expect(result).toBe('success');
-  expect(attempts).toBe(3);
-});
+```python
+def test_residual_block_preserves_shape(sample_batch):
+    block = ResidualBlock(channels=16)
+    out = block(sample_batch)
+    assert out.shape == sample_batch.shape
 ```
 Clear name, tests real behavior, one thing
 </Good>
 
 <Bad>
-```typescript
-test('retry works', async () => {
-  const mock = jest.fn()
-    .mockRejectedValueOnce(new Error())
-    .mockRejectedValueOnce(new Error())
-    .mockResolvedValueOnce('success');
-  await retryOperation(mock);
-  expect(mock).toHaveBeenCalledTimes(3);
-});
+```python
+def test_residual_block(sample_batch):
+    block = ResidualBlock(channels=16)
+    out = block(sample_batch)
+    assert out.shape == sample_batch.shape
+    assert out.dtype == torch.float32
+    loss = out.sum()
+    loss.backward()
+    for p in block.parameters():
+        assert p.grad is not None
 ```
-Vague name, tests mock not code
+Tests multiple behaviors at once — split into separate tests
 </Bad>
 
 **Requirements:**
 - One behavior
-- Clear name
-- Real code (no mocks unless unavoidable)
+- Clear name describing what's tested
+- Small tensors, fast execution
 
 ### Verify RED - Watch It Fail
 
 **MANDATORY. Never skip.**
 
 ```bash
-npm test path/to/test.test.ts
+pytest tests/test_residual.py::test_residual_block_preserves_shape -x
 ```
 
 Confirm:
@@ -132,33 +126,31 @@ Confirm:
 Write simplest code to pass the test.
 
 <Good>
-```typescript
-async function retryOperation<T>(fn: () => Promise<T>): Promise<T> {
-  for (let i = 0; i < 3; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      if (i === 2) throw e;
-    }
-  }
-  throw new Error('unreachable');
-}
+```python
+class ResidualBlock(nn.Module):
+    def __init__(self, channels: int):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, 3, padding=1)
+        self.conv2 = nn.Conv2d(channels, channels, 3, padding=1)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x + self.conv2(F.relu(self.conv1(x)))
 ```
 Just enough to pass
 </Good>
 
 <Bad>
-```typescript
-async function retryOperation<T>(
-  fn: () => Promise<T>,
-  options?: {
-    maxRetries?: number;
-    backoff?: 'linear' | 'exponential';
-    onRetry?: (attempt: number) => void;
-  }
-): Promise<T> {
-  // YAGNI
-}
+```python
+class ResidualBlock(nn.Module):
+    def __init__(
+        self, channels: int, *,
+        groups: int = 1,
+        norm: str = "batch",
+        activation: str = "relu",
+        dropout: float = 0.0,
+        se_ratio: float | None = None,
+    ):
+        # YAGNI — no test requires any of this
 ```
 Over-engineered
 </Bad>
@@ -170,7 +162,7 @@ Don't add features, refactor other code, or "improve" beyond the test.
 **MANDATORY.**
 
 ```bash
-npm test path/to/test.test.ts
+pytest tests/test_residual.py -x
 ```
 
 Confirm:
@@ -199,9 +191,93 @@ Next failing test for next feature.
 
 | Quality | Good | Bad |
 |---------|------|-----|
-| **Minimal** | One thing. "and" in name? Split it. | `test('validates email and domain and whitespace')` |
-| **Clear** | Name describes behavior | `test('test1')` |
+| **Minimal** | One thing. "and" in name? Split it. | `test_validates_shape_and_dtype_and_gradients` |
+| **Clear** | Name describes behavior | `test_model_1` |
+| **Fast** | Small tensors (batch=4, tiny dims) | Full-size ImageNet inputs |
+| **Deterministic** | Seeded or tolerance-based | Flaky due to random init |
 | **Shows intent** | Demonstrates desired API | Obscures what code should do |
+
+## DL-Specific TDD Patterns
+
+### Decomposing a Module into Tests
+
+A neural network module isn't one behavior — break it down:
+
+```
+ResidualBlock
+  → test shape preservation    (RED → GREEN)
+  → test gradient flow         (RED → GREEN)
+  → test residual connection   (RED → GREEN)
+  → test batch independence    (RED → GREEN)
+  → REFACTOR
+```
+
+Write one test, implement just enough, repeat. Don't implement the full module then test it.
+
+### Numerical Tolerance
+
+DL code is floating-point — use tolerances, not exact equality:
+
+```python
+def test_layer_norm_normalizes(sample_batch):
+    norm = nn.LayerNorm(sample_batch.shape[1:])
+    out = norm(sample_batch)
+    assert torch.allclose(out.mean(dim=-1), torch.zeros(4), atol=1e-5)
+    assert torch.allclose(out.std(dim=-1), torch.ones(4), atol=1e-1)
+```
+
+### Determinism
+
+Seed random state when test outcomes depend on initialization:
+
+```python
+@pytest.fixture
+def sample_batch():
+    torch.manual_seed(42)
+    return torch.randn(4, 3, 32, 32)
+```
+
+Don't seed everything globally — only where randomness affects assertions.
+
+### Testing on Available Devices
+
+```python
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_model_runs_on_gpu(model, sample_batch):
+    model = model.to("cuda")
+    out = model(sample_batch.to("cuda"))
+    assert out.device.type == "cuda"
+```
+
+### Testing Loss Decreases
+
+The simplest training sanity check — if loss doesn't decrease, something is broken:
+
+```python
+def test_loss_decreases(model, sample_batch, target_batch):
+    opt = torch.optim.SGD(model.parameters(), lr=0.01)
+    loss_fn = nn.CrossEntropyLoss()
+
+    initial_loss = loss_fn(model(sample_batch), target_batch).item()
+    for _ in range(50):
+        loss = loss_fn(model(sample_batch), target_batch)
+        opt.zero_grad(); loss.backward(); opt.step()
+
+    assert loss.item() < initial_loss * 0.5, "Loss didn't decrease enough"
+```
+
+### Companion Skill: test-nn-components
+
+The **test-nn-components** skill defines the five critical checks for neural network code:
+1. Output shape (including batch=1 edge case)
+2. Gradient flow
+3. Single-batch overfit
+4. Batch independence
+5. Data pipeline sanity
+
+Use test-nn-components to decide **what** to test. Use this TDD skill for **how** to work — write each check as a failing test first, then implement.
 
 ## Why Order Matters
 
@@ -215,13 +291,13 @@ Tests written after code pass immediately. Passing immediately proves nothing:
 
 Test-first forces you to see the test fail, proving it actually tests something.
 
-**"I already manually tested all the edge cases"**
+**"I already tested it in a notebook"**
 
-Manual testing is ad-hoc. You think you tested everything but:
+Notebook testing is ad-hoc:
 - No record of what you tested
 - Can't re-run when code changes
-- Easy to forget cases under pressure
-- "It worked when I tried it" ≠ comprehensive
+- Cell execution order matters — "it worked when I ran it" ≠ reproducible
+- Notebook state accumulates — variables from earlier cells mask bugs
 
 Automated tests are systematic. They run the same way every time.
 
@@ -233,23 +309,20 @@ Sunk cost fallacy. The time is already gone. Your choice now:
 
 The "waste" is keeping code you can't trust. Working code without real tests is technical debt.
 
-**"TDD is dogmatic, being pragmatic means adapting"**
+**"TDD doesn't work for ML — you need to experiment"**
 
-TDD IS pragmatic:
-- Finds bugs before commit (faster than debugging after)
-- Prevents regressions (tests catch breaks immediately)
-- Documents behavior (tests show how to use code)
-- Enables refactoring (change freely, tests catch breaks)
+Experimentation and TDD serve different phases:
+- **Experiment** in notebooks to find the right architecture/hyperparameters
+- **Implement** with TDD once you know what to build
+- Throw away the notebook code. Implement fresh from tests.
 
-"Pragmatic" shortcuts = debugging in production = slower.
-
-**"Tests after achieve the same goals - it's spirit not ritual"**
+**"Tests after achieve the same goals — it's spirit not ritual"**
 
 No. Tests-after answer "What does this do?" Tests-first answer "What should this do?"
 
-Tests-after are biased by your implementation. You test what you built, not what's required. You verify remembered edge cases, not discovered ones.
+Tests-after are biased by your implementation. You test what you built, not what's required.
 
-Tests-first force edge case discovery before implementing. Tests-after verify you remembered everything (you didn't).
+Tests-first force edge case discovery before implementing.
 
 30 minutes of tests after ≠ TDD. You get coverage, lose proof tests work.
 
@@ -259,15 +332,14 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 |--------|---------|
 | "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
 | "I'll test after" | Tests passing immediately prove nothing. |
-| "Tests after achieve same goals" | Tests-after = "what does this do?" Tests-first = "what should this do?" |
-| "Already manually tested" | Ad-hoc ≠ systematic. No record, can't re-run. |
+| "Already tested in notebook" | Ad-hoc ≠ systematic. Cell order masks bugs. |
 | "Deleting X hours is wasteful" | Sunk cost fallacy. Keeping unverified code is technical debt. |
 | "Keep as reference, write tests first" | You'll adapt it. That's testing after. Delete means delete. |
 | "Need to explore first" | Fine. Throw away exploration, start with TDD. |
 | "Test hard = design unclear" | Listen to test. Hard to test = hard to use. |
-| "TDD will slow me down" | TDD faster than debugging. Pragmatic = test-first. |
-| "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
-| "Existing code has no tests" | You're improving it. Add tests for existing code. |
+| "TDD will slow me down" | TDD faster than debugging silent numerical errors. |
+| "TDD doesn't work for ML" | TDD covers implementation. Experimentation is separate. |
+| "The model trains, so it works" | Training ≠ correct. Silent bugs hide in accuracy noise. |
 
 ## Red Flags - STOP and Start Over
 
@@ -277,52 +349,51 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 - Can't explain why test failed
 - Tests added "later"
 - Rationalizing "just this once"
-- "I already manually tested it"
+- "I already tested it in the notebook"
 - "Tests after achieve the same purpose"
-- "It's about spirit not ritual"
 - "Keep as reference" or "adapt existing code"
 - "Already spent X hours, deleting is wasteful"
 - "TDD is dogmatic, I'm being pragmatic"
+- "The model trains fine without tests"
 - "This is different because..."
 
 **All of these mean: Delete code. Start over with TDD.**
 
 ## Example: Bug Fix
 
-**Bug:** Empty email accepted
+**Bug:** Model outputs wrong shape when batch_size=1
 
 **RED**
-```typescript
-test('rejects empty email', async () => {
-  const result = await submitForm({ email: '' });
-  expect(result.error).toBe('Email required');
-});
+```python
+@torch.no_grad()
+def test_output_shape_batch_one(model):
+    x = torch.randn(1, 3, 32, 32)
+    out = model(x)
+    assert out.shape == (1, 10), f"Expected (1, 10), got {out.shape}"
 ```
 
 **Verify RED**
 ```bash
-$ npm test
-FAIL: expected 'Email required', got undefined
+$ pytest tests/test_model.py::test_output_shape_batch_one -x
+FAILED: Expected (1, 10), got (10,)
 ```
 
 **GREEN**
-```typescript
-function submitForm(data: FormData) {
-  if (!data.email?.trim()) {
-    return { error: 'Email required' };
-  }
-  // ...
-}
+```python
+def forward(self, x: Tensor) -> Tensor:
+    x = self.features(x)
+    x = x.flatten(1)  # was x.squeeze() — removed batch dim when B=1
+    return self.classifier(x)
 ```
 
 **Verify GREEN**
 ```bash
-$ npm test
-PASS
+$ pytest tests/test_model.py -x
+PASSED
 ```
 
 **REFACTOR**
-Extract validation for multiple fields if needed.
+None needed — minimal change.
 
 ## Verification Checklist
 
@@ -334,8 +405,8 @@ Before marking work complete:
 - [ ] Wrote minimal code to pass each test
 - [ ] All tests pass
 - [ ] Output pristine (no errors, warnings)
-- [ ] Tests use real code (mocks only if unavoidable)
-- [ ] Edge cases and errors covered
+- [ ] Used small tensors and fast execution
+- [ ] Edge cases covered (batch=1, empty input, device placement)
 
 Can't check all boxes? You skipped TDD. Start over.
 
@@ -343,10 +414,12 @@ Can't check all boxes? You skipped TDD. Start over.
 
 | Problem | Solution |
 |---------|----------|
-| Don't know how to test | Write wished-for API. Write assertion first. Ask your human partner. |
-| Test too complicated | Design too complicated. Simplify interface. |
-| Must mock everything | Code too coupled. Use dependency injection. |
-| Test setup huge | Extract helpers. Still complex? Simplify design. |
+| Don't know what to test | Use **test-nn-components** — the 5 checks. |
+| Test too slow | Smaller tensors, fewer steps. Mark slow tests with `@pytest.mark.slow`. |
+| Flaky due to randomness | Seed with `torch.manual_seed`. Use tolerances (`atol`, `rtol`). |
+| Hard to test in isolation | Extract the layer/block. If it's tangled, the design needs work. |
+| Need real data to test | You don't. Use `torch.randn` / `torch.randint`. Real data is for training. |
+| Test setup too complex | Use pytest fixtures. Still complex? Simplify the module interface. |
 
 ## Debugging Integration
 
@@ -357,9 +430,9 @@ Never fix bugs without a test.
 ## Testing Anti-Patterns
 
 When adding mocks or test utilities, read @testing-anti-patterns.md to avoid common pitfalls:
-- Testing mock behavior instead of real behavior
-- Adding test-only methods to production classes
-- Mocking without understanding dependencies
+- Testing synthetic data properties instead of model behavior
+- Adding test-only methods to production modules
+- Over-mocking when small tensors suffice
 
 ## Final Rule
 
