@@ -268,16 +268,16 @@ def test_loss_decreases(model, sample_batch, target_batch):
     assert loss.item() < initial_loss * 0.5, "Loss didn't decrease enough"
 ```
 
-### Companion Skill: test-nn-components
+### What to Test: The Five Checks
 
-The **test-nn-components** skill defines the five critical checks for neural network code:
+Read @test-checks.md for the five critical checks for neural network code:
 1. Output shape (including batch=1 edge case)
 2. Gradient flow
 3. Single-batch overfit
 4. Batch independence
 5. Data pipeline sanity
 
-Use test-nn-components to decide **what** to test. Use this skill for **how** to work — write each check as a failing test first, then implement.
+Use the checks to decide **what** to test. Use this skill for **how** to work — write each check as a failing test first, then implement.
 
 ## Why Order Matters
 
@@ -414,7 +414,7 @@ Can't check all boxes? You skipped test-before-code. Start over.
 
 | Problem | Solution |
 |---------|----------|
-| Don't know what to test | Use **test-nn-components** — the 5 checks. |
+| Don't know what to test | Read @test-checks.md — the 5 checks. |
 | Test too slow | Smaller tensors, fewer steps. Mark slow tests with `@pytest.mark.slow`. |
 | Flaky due to randomness | Seed with `torch.manual_seed`. Use tolerances (`atol`, `rtol`). |
 | Hard to test in isolation | Extract the layer/block. If it's tangled, the design needs work. |

@@ -8,8 +8,7 @@ Writing correct neural networks is hard. Silent bugs (wrong shapes, broken gradi
 
 ## Skills
 
-- **`nn-skills:test-before-code`** — Test-before-code workflow. Write the test first, watch it fail, write minimal code to pass.
-- **`nn-skills:test-nn-components`** — Audit and complete test coverage for `nn.Module` subclasses against five critical checks (output shape, gradient flow, dtype consistency, determinism, serialization).
+- **`nn-skills:test-before-code`** — Test-before-code workflow. Write the test first, watch it fail, write minimal code to pass. Includes five critical checks for nn components (output shape, gradient flow, single-batch overfit, batch independence, data pipeline sanity) and a testing anti-patterns reference.
 
 ## Install
 

@@ -1,12 +1,12 @@
----
-name: test-nn-components
-description: Use when writing or reviewing tests for nn.Module subclasses, model components, or data pipelines in PyTorch projects. Audits existing test coverage against five critical checks and fills gaps. Use this skill whenever the user mentions testing a model, checking a layer, verifying a training loop, or auditing neural network test coverage — even if they don't say "nn.Module" explicitly.
----
+# Test Checks for NN Components
 
-# Test NN Components
+**Load this reference when:** writing or reviewing tests for nn.Module subclasses, model components, or data pipelines.
 
-Audit and complete test coverage for nn components. Five checks catch
-bugs that code review misses — each targets a silent failure mode.
+## Overview
+
+Five checks catch bugs that code review misses — each targets a silent failure mode. Audit existing test coverage against these checks and fill gaps.
+
+**Core principle:** These are the recommended checks to cover, not the only tests you'll write. Start here, then add domain-specific tests as needed.
 
 ## Process
 
@@ -14,14 +14,6 @@ bugs that code review misses — each targets a silent failure mode.
 2. **Map** which of the 5 checks are already covered
 3. **Report** coverage table to user (check × target, ✓/✗/NA)
 4. **Write** tests for missing checks (skip NA)
-
-## The Five Checks
-
-1. **Output shape** — normal batch + batch=1 (catches squeeze bugs)
-2. **Gradient flow** — every requires_grad param gets non-zero grad
-3. **Single-batch overfit** — fixed batch, N steps, loss → ~0
-4. **Batch independence** — mask one sample, backprop, zero grad on masked input
-5. **Data pipeline sanity** — shape, value range, augmentation randomness
 
 ## Which Checks Apply
 
@@ -70,7 +62,7 @@ def dataset():
     return MyDataset(split="train")
 ```
 
-## Check Implementations
+## The Five Checks
 
 ### 1. Output Shape
 
