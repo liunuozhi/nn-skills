@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "nn-skills",
-      "description": "TDD and PyTorch test coverage skills for neural network development",
+      "description": "Test-before-code and PyTorch test coverage skills for neural network development",
       "version": "0.0.1",
       "source": "./"
     }

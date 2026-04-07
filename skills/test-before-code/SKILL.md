@@ -1,5 +1,5 @@
 ---
-name: test-driven-development
+name: test-before-code
 description: Use when implementing any nn.Module, loss function, training loop, or data pipeline — write the failing test before writing implementation code
 ---
 

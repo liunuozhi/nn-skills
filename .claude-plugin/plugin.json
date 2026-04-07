@@ -1,6 +1,6 @@
 {
   "name": "nn-skills",
-  "description": "Neural network development skills: TDD, testing, and component validation",
+  "description": "Neural network development skills: test-before-code workflow, testing, and component validation",
   "version": "0.0.1",
   "author": {
     "name": "Liu"
