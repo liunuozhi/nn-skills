@@ -8,7 +8,7 @@
     {
       "name": "nn-skills",
       "description": "Test-before-code and PyTorch test coverage skills for neural network development",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "source": "./"
     }
   ]
