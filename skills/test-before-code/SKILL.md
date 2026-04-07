@@ -3,7 +3,7 @@ name: test-before-code
 description: Use when implementing any nn.Module, loss function, training loop, or data pipeline — write the failing test before writing implementation code
 ---
 
-# Test-Driven Development (TDD)
+# Test Before Code
 
 ## Overview
 
@@ -28,7 +28,7 @@ Write the test first. Watch it fail. Write minimal code to pass.
 - Configuration files
 - Hyperparameter sweeps
 
-Thinking "skip TDD just this once"? Stop. That's rationalization.
+Thinking "skip testing just this once"? Stop. That's rationalization.
 
 ## The Iron Law
 
@@ -49,7 +49,7 @@ Implement fresh from tests. Period.
 ## Red-Green-Refactor
 
 ```dot
-digraph tdd_cycle {
+digraph test_before_code_cycle {
     rankdir=LR;
     red [label="RED\nWrite failing test", shape=box, style=filled, fillcolor="#ffcccc"];
     verify_red [label="Verify fails\ncorrectly", shape=diamond];
@@ -197,7 +197,7 @@ Next failing test for next feature.
 | **Deterministic** | Seeded or tolerance-based | Flaky due to random init |
 | **Shows intent** | Demonstrates desired API | Obscures what code should do |
 
-## DL-Specific TDD Patterns
+## DL-Specific Patterns
 
 ### Decomposing a Module into Tests
 
@@ -277,7 +277,7 @@ The **test-nn-components** skill defines the five critical checks for neural net
 4. Batch independence
 5. Data pipeline sanity
 
-Use test-nn-components to decide **what** to test. Use this TDD skill for **how** to work — write each check as a failing test first, then implement.
+Use test-nn-components to decide **what** to test. Use this skill for **how** to work — write each check as a failing test first, then implement.
 
 ## Why Order Matters
 
@@ -304,16 +304,16 @@ Automated tests are systematic. They run the same way every time.
 **"Deleting X hours of work is wasteful"**
 
 Sunk cost fallacy. The time is already gone. Your choice now:
-- Delete and rewrite with TDD (X more hours, high confidence)
+- Delete and rewrite test-first (X more hours, high confidence)
 - Keep it and add tests after (30 min, low confidence, likely bugs)
 
 The "waste" is keeping code you can't trust. Working code without real tests is technical debt.
 
-**"TDD doesn't work for ML — you need to experiment"**
+**"Test-first doesn't work for ML — you need to experiment"**
 
-Experimentation and TDD serve different phases:
+Experimentation and test-first serve different phases:
 - **Experiment** in notebooks to find the right architecture/hyperparameters
-- **Implement** with TDD once you know what to build
+- **Implement** test-first once you know what to build
 - Throw away the notebook code. Implement fresh from tests.
 
 **"Tests after achieve the same goals — it's spirit not ritual"**
@@ -324,7 +324,7 @@ Tests-after are biased by your implementation. You test what you built, not what
 
 Tests-first force edge case discovery before implementing.
 
-30 minutes of tests after ≠ TDD. You get coverage, lose proof tests work.
+30 minutes of tests after ≠ test-before-code. You get coverage, lose proof tests work.
 
 ## Common Rationalizations
 
@@ -335,10 +335,10 @@ Tests-first force edge case discovery before implementing.
 | "Already tested in notebook" | Ad-hoc ≠ systematic. Cell order masks bugs. |
 | "Deleting X hours is wasteful" | Sunk cost fallacy. Keeping unverified code is technical debt. |
 | "Keep as reference, write tests first" | You'll adapt it. That's testing after. Delete means delete. |
-| "Need to explore first" | Fine. Throw away exploration, start with TDD. |
+| "Need to explore first" | Fine. Throw away exploration, start test-first. |
 | "Test hard = design unclear" | Listen to test. Hard to test = hard to use. |
-| "TDD will slow me down" | TDD faster than debugging silent numerical errors. |
-| "TDD doesn't work for ML" | TDD covers implementation. Experimentation is separate. |
+| "Testing first will slow me down" | Testing first is faster than debugging silent numerical errors. |
+| "Test-first doesn't work for ML" | Test-first covers implementation. Experimentation is separate. |
 | "The model trains, so it works" | Training ≠ correct. Silent bugs hide in accuracy noise. |
 
 ## Red Flags - STOP and Start Over
@@ -353,11 +353,11 @@ Tests-first force edge case discovery before implementing.
 - "Tests after achieve the same purpose"
 - "Keep as reference" or "adapt existing code"
 - "Already spent X hours, deleting is wasteful"
-- "TDD is dogmatic, I'm being pragmatic"
+- "Test-first is dogmatic, I'm being pragmatic"
 - "The model trains fine without tests"
 - "This is different because..."
 
-**All of these mean: Delete code. Start over with TDD.**
+**All of these mean: Delete code. Start over with test-before-code.**
 
 ## Example: Bug Fix
 
@@ -408,7 +408,7 @@ Before marking work complete:
 - [ ] Used small tensors and fast execution
 - [ ] Edge cases covered (batch=1, empty input, device placement)
 
-Can't check all boxes? You skipped TDD. Start over.
+Can't check all boxes? You skipped test-before-code. Start over.
 
 ## When Stuck
 
@@ -423,7 +423,7 @@ Can't check all boxes? You skipped TDD. Start over.
 
 ## Debugging Integration
 
-Bug found? Write failing test reproducing it. Follow TDD cycle. Test proves fix and prevents regression.
+Bug found? Write failing test reproducing it. Follow the red-green-refactor cycle. Test proves fix and prevents regression.
 
 Never fix bugs without a test.
 
@@ -438,7 +438,7 @@ When adding mocks or test utilities, read @testing-anti-patterns.md to avoid com
 
 ```
 Production code → test exists and failed first
-Otherwise → not TDD
+Otherwise → not test-before-code
 ```
 
 No exceptions without your human partner's permission.

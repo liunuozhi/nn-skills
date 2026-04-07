@@ -8,7 +8,7 @@ Tests must verify real behavior, not fixture properties. Synthetic data is a mea
 
 **Core principle:** Test what the module does, not what the test data looks like.
 
-**Following strict TDD prevents these anti-patterns.**
+**Writing tests before code prevents these anti-patterns.**
 
 ## The Iron Laws
 
@@ -299,9 +299,9 @@ def test_softmax_output_sums_to_one():
 
 A `nn.Linear(4, 2)` is faster to set up, faster to run, and tests real behavior.
 
-## TDD Prevents These Anti-Patterns
+## Test-Before-Code Prevents These Anti-Patterns
 
-**Why TDD helps:**
+**Why test-before-code helps:**
 1. **Write test first** → Forces you to think about what you're actually testing
 2. **Watch it fail** → Confirms test tests real behavior, not fixtures
 3. **Minimal implementation** → No test-only methods creep in
@@ -332,6 +332,6 @@ A `nn.Linear(4, 2)` is faster to set up, faster to run, and tests real behavior.
 
 **In DL testing, small real models beat mocks every time.**
 
-If TDD reveals you're testing fixture behavior or mock interactions, you've gone wrong.
+If test-before-code reveals you're testing fixture behavior or mock interactions, you've gone wrong.
 
 Fix: Test real behavior with tiny tensors.
